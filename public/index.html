@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NAVOS - AI BRIDGE</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ======================================================================
+       VIEW 1: LANDING PAGE
+       ====================================================================== -->
+  <!-- ======================================================================
+       VIEW 1: LANDING PAGE (FULL-SCREEN CYBER BLUEPRINT + MATRIX EMPTY SPACE RAIN)
+       ====================================================================== -->
+  <div id="landing-view" class="landing-view" title="Press ENTER or Click to Launch Bridge">
+    <!-- Matrix Digital Rain Canvas for Empty Screen Areas -->
+    <canvas id="matrix-canvas-landing" class="matrix-canvas-landing"></canvas>
+
+    <!-- Unified Single Photo Container (Zooms into NavOS on Launch) -->
+    <div class="landing-photo-wrapper" id="landing-photo-wrapper">
+      <img src="Assets/Landing_page.png" alt="NAVOS AI Bridge" class="landing-hero-img" id="landing-hero-img">
+    </div>
+  </div>
+
+  <!-- Full-Screen Matrix Digital Rain for Dashboard Background -->
+  <canvas id="matrix-canvas-dash" class="matrix-canvas-dash"></canvas>
+
+  <!-- ======================================================================
+       VIEW 2: DASHBOARD
+       ====================================================================== -->
+  <div id="dashboard-view">
+    <!-- Header & Unified Status Bar -->
+    <header class="dash-header">
+      <div class="dash-header-left">
+        <h1 class="dash-title" id="dash-home-btn" title="Click to view landing page">NavOS - AI BRIDGE</h1>
+      </div>
+
+      <div class="dash-status-bar">
+        <div class="status-item" id="status-indicator-block">
+          <span id="server-status-dot" class="status-dot"></span>
+          <span id="server-uptime-display" class="uptime-val">0s</span>
+        </div>
+        <div class="status-item">
+          <span class="stat-label">Connected Agents:</span>
+          <span id="stat-connected-agents" class="stat-count">0</span>
+        </div>
+        <div class="status-item">
+          <span class="stat-label">Projects:</span>
+          <span id="stat-projects-count" class="stat-count">0</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Grid: Left Column (Connected Agents) & Right Column (Running Projects) -->
+    <main class="dash-grid">
+      <!-- Left Column -->
+      <div class="grid-col">
+        <!-- Connected Agents Panel -->
+        <section class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Connected Agents</h2>
+          </div>
+          <div class="panel-body">
+            <div id="connected-agents-list" class="agents-list">
+              <div class="empty-notice">No agents connected</div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Right Column -->
+      <div class="grid-col">
+        <!-- Running Projects Panel -->
+        <section class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Running Projects</h2>
+          </div>
+
+          <div class="panel-body">
+            <div id="running-projects-list" class="projects-list">
+              <div class="empty-notice">No running projects</div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,732 @@
+/* ==========================================================================
+   NAVOS - AI BRIDGE | BRUTALIST TECHNICAL DESIGN SYSTEM
+   Cyberpunk Blueprint / Technical Control Panel / Y2K Aesthetic
+   ========================================================================== */
+
+:root {
+  --bg: #000000;
+  --surface: #080808;
+  --surface-hover: #141414;
+  --surface-alt: #0c0c0c;
+  --border: #222222;
+  --border-bright: #e5e5e5;
+  --border-dim: #141414;
+  --text: #ffffff;
+  --text-dim: #888888;
+  --text-muted: #555555;
+  --green: #10b981;
+  --red: #ef4444;
+  --font-mono: 'Consolas', 'JetBrains Mono', 'Courier New', monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Background Blueprint Grid */
+body {
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+button, input, select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  border-radius: 0;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid var(--border-bright);
+  background: transparent;
+  color: var(--text);
+  padding: 8px 16px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.15s ease;
+}
+
+button:hover:not(:disabled) {
+  background: var(--border-bright);
+  color: var(--bg);
+}
+
+button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  border-color: var(--border);
+}
+
+.btn-primary {
+  background: var(--border-bright);
+  color: var(--bg);
+  border: 1px solid var(--border-bright);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #ffffff;
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+}
+
+.btn-ghost {
+  border-color: var(--border);
+  color: var(--text-dim);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--border-bright);
+  color: var(--text);
+  background: transparent;
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+/* ==========================================================================
+   VIEW 1: LANDING PAGE (FULL-SCREEN CYBER BLUEPRINT + ZOOM OPEN)
+   ========================================================================== */
+#landing-view {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  z-index: 1000;
+  background: #000000;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: opacity 0.75s cubic-bezier(0.7, 0, 0.25, 1), visibility 0.75s ease;
+}
+
+/* Matrix Digital Rain in Empty Areas */
+.matrix-canvas-landing {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  background: #000000;
+}
+
+/* Unified Photo Wrapper (Focused on NavOS just below middle line: 50% X, 60% Y) */
+.landing-photo-wrapper {
+  position: absolute;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  pointer-events: none;
+  background: transparent;
+  transform-origin: 50% 60%;
+  will-change: transform, opacity, filter;
+  transition: transform 0.8s cubic-bezier(0.7, 0, 0.25, 1),
+              opacity 0.65s cubic-bezier(0.7, 0, 0.25, 1),
+              filter 0.65s ease;
+}
+
+.landing-hero-img {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+  filter: contrast(106%) brightness(99%);
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   ZOOM OPEN ANIMATION (ZOOMS DEEP INTO NAVOS TO REVEAL DB)
+   ========================================================================== */
+#landing-view.zoom-open {
+  pointer-events: none;
+  opacity: 0;
+}
+
+#landing-view.zoom-open .landing-photo-wrapper {
+  transform: scale(8.5);
+  opacity: 0;
+  filter: blur(14px) contrast(140%) brightness(1.3);
+}
+
+#landing-view.zoom-open .matrix-canvas-landing {
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+/* Dashboard Background Matrix Digital Rain */
+.matrix-canvas-dash {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--bg);
+}
+
+/* ==========================================================================
+   VIEW 2: DASHBOARD
+   ========================================================================== */
+#dashboard-view {
+  position: relative;
+  z-index: 1;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 18px;
+  opacity: 0;
+  transform: scale(0.93) translateY(12px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+  display: none;
+}
+
+body.dashboard-active #dashboard-view {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+/* Header & Status Bar */
+.dash-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  border: 1px solid var(--border-bright);
+  background: rgba(0, 0, 0, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  min-height: 64px;
+}
+
+.dash-header-left {
+  display: flex;
+  align-items: center;
+  padding: 14px 20px;
+  border-right: 1px solid var(--border);
+}
+
+.dash-title {
+  font-family: var(--font-sans);
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.dash-title:hover {
+  opacity: 0.85;
+}
+
+.dash-status-bar {
+  display: flex;
+  align-items: stretch;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px;
+  border-left: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  display: inline-block;
+}
+
+.status-dot.disconnected {
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red);
+}
+
+.uptime-val {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.stat-label {
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.stat-count {
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--text);
+}
+
+/* Dashboard Layout Grid */
+.dash-grid {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 18px;
+  align-items: stretch;
+}
+
+.grid-col {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  height: 100%;
+}
+
+/* Technical Panels */
+.panel {
+  border: 1px solid var(--border);
+  background: rgba(8, 8, 8, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.panel-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(14, 14, 14, 0.9);
+  flex-shrink: 0;
+}
+
+.panel-title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.panel-body {
+  padding: 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Connected Agents */
+.agents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agent-card {
+  border: 1px solid var(--border);
+  background: #080808;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agent-card:hover {
+  border-color: var(--border-bright);
+}
+
+.agent-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.agent-dot {
+  color: var(--green);
+  font-size: 10px;
+}
+
+.agent-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.5px;
+}
+
+.agent-info-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.agent-info-row .label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  min-width: 60px;
+}
+
+.agent-info-row .val {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.agent-info-row .role-tag {
+  color: #60a5fa;
+  font-weight: 700;
+}
+
+.empty-notice {
+  padding: 24px 16px;
+  text-align: center;
+  border: 1px dashed var(--border);
+  color: var(--text-dim);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+
+
+/* New Project Form Panel */
+.new-project-panel {
+  display: none;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  background: #080808;
+}
+
+.new-project-panel.open {
+  display: block;
+}
+
+.form-group {
+  margin-bottom: 12px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+  color: var(--text-dim);
+}
+
+.form-input {
+  width: 100%;
+  padding: 8px 10px;
+  background: #000000;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  outline: none;
+}
+
+.form-input:focus {
+  border-color: var(--border-bright);
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* Running Projects Section */
+/* Running Projects Section */
+.projects-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.project-card {
+  border: 1px solid var(--border);
+  background: #080808;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.project-card:hover {
+  border-color: var(--border-bright);
+}
+
+.project-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-dim);
+  padding-bottom: 8px;
+}
+
+.project-name {
+  font-size: 14px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text);
+}
+
+.project-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.project-status-dot {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.project-expand-icon {
+  font-size: 10px;
+  color: var(--text-dim);
+  transition: color 0.15s ease;
+}
+
+.project-card:hover .project-expand-icon {
+  color: var(--text);
+}
+
+.project-expanded-drawer {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-dim);
+  cursor: default;
+}
+
+.project-card.expanded .project-expanded-drawer {
+  display: flex;
+}
+
+.project-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+.btn-delete-project {
+  background: transparent;
+  border: 1px solid #ef4444;
+  color: #ef4444;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-delete-project:hover {
+  background: #ef4444;
+  color: #000000;
+}
+
+.btn-delete-project:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.status-worker_active { color: var(--green); }
+.status-under_review { color: #60a5fa; }
+.status-completed { color: var(--green); }
+.status-waiting_human_input { color: #f59e0b; }
+.status-idle { color: var(--text-dim); }
+
+.project-roles-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.role-selector-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.role-selector-group label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.role-selector-group select {
+  background: #000000;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  outline: none;
+}
+
+.role-selector-group select:focus {
+  border-color: var(--border-bright);
+}
+
+.project-phase-box {
+  background: #030303;
+  border: 1px solid var(--border-dim);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.phase-number-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.phase-badge {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--border-bright);
+}
+
+.phase-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.phase-objective {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  max-height: 60px;
+  overflow-y: auto;
+}
+
+.no-phase {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.human-input-box {
+  border: 1px solid #f59e0b;
+  background: rgba(245, 158, 11, 0.05);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.human-input-header {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: #f59e0b;
+  text-transform: uppercase;
+}
+
+.human-input-q, .human-input-r {
+  font-size: 11px;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.human-input-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.human-input-field {
+  flex: 1;
+  background: #000000;
+  border: 1px solid var(--border);
+  color: #ffffff;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.human-input-field:focus {
+  border-color: #f59e0b;
+}
+
+/* Responsive */
+@media (max-width: 990px) {
+  .landing-main {
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+  .dash-grid {
+    grid-template-columns: 1fr;
+  }
+  .dash-header {
+    flex-direction: column;
+  }
+  .dash-header-left {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .dash-status-bar {
+    flex-wrap: wrap;
+  }
+  .status-item {
+    padding: 10px 16px;
+  }
+}
