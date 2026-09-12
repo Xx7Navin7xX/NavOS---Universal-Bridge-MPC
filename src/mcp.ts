@@ -1,8 +1,9 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, InitializeRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { allTools } from './tools/index.js';
-import { getToolDefinition, SessionContext } from './types.js';
+import { getToolDefinition, SessionContext, AgentRole } from './types.js';
 import { sessionRegistry } from './sessions.js';
+import { getAgent, touchAgent } from './db.js';
 
 export function createMcpServer(sessionId: string, initialCtx?: Partial<SessionContext>): { server: Server, ctx: SessionContext } {
   const server = new Server({
@@ -74,10 +75,47 @@ export function createMcpServer(sessionId: string, initialCtx?: Partial<SessionC
       ctx.isExplicitlyConnected = active.isExplicitlyConnected;
     }
 
+    // Resolve persistent logical agent identity:
+    // Priority 1: Explicit agent_id argument from tool call (supports stateless clients like ChatGPT Web)
+    // Priority 2: In-memory transport session agentId (supports stateful clients like Antigravity IDE)
+    const rawArgs = (request.params.arguments || {}) as Record<string, any>;
+    const effectiveAgentId = (typeof rawArgs.agent_id === 'string' && rawArgs.agent_id.trim()) 
+      ? rawArgs.agent_id.trim() 
+      : ctx.agentId;
+
+    if (effectiveAgentId) {
+      const dbAgent = getAgent(effectiveAgentId);
+      if (dbAgent && dbAgent.is_explicitly_connected === 1) {
+        ctx.agentId = dbAgent.id;
+        ctx.modelName = dbAgent.model_name || ctx.modelName;
+        ctx.clientLocation = dbAgent.client_location || ctx.clientLocation;
+        ctx.agentType = dbAgent.agent_type || ctx.agentType;
+        ctx.directory = dbAgent.directory || ctx.directory;
+        ctx.role = (dbAgent.role as AgentRole) || ctx.role;
+        ctx.provider = dbAgent.provider || ctx.provider;
+        ctx.activeProject = dbAgent.current_project || ctx.activeProject;
+        ctx.isExplicitlyConnected = true;
+
+        touchAgent(dbAgent.id);
+
+        if (active) {
+          active.agentId = dbAgent.id;
+          active.isExplicitlyConnected = true;
+          active.role = ctx.role;
+          active.activeProject = ctx.activeProject;
+          active.modelName = ctx.modelName;
+          active.clientLocation = ctx.clientLocation;
+        }
+      }
+    }
+
     const tool = allTools.find(t => t.name === request.params.name);
     if (!tool) {
       throw new Error(`Unknown tool: ${request.params.name}`);
     }
+
+    // Structured logging for MCP request tracing without logging secrets
+    console.log(`[MCP] tool=${tool.name} agent_id=${ctx.agentId || 'unauthenticated'} role=${ctx.role} session=${sessionId.slice(0, 8)}...`);
 
     // Explicit connection enforcement: Agents must call connect_to_mpc first before calling other tools
     if (!ctx.isExplicitlyConnected && tool.name !== 'connect_to_mpc' && tool.name !== 'get_server_status') {
@@ -85,7 +123,7 @@ export function createMcpServer(sessionId: string, initialCtx?: Partial<SessionC
         isError: true,
         content: [{
           type: 'text',
-          text: `Unauthorized: You must call 'connect_to_mpc' first with your model_name, client_location, and directory before using '${tool.name}'.`
+          text: `Unauthorized: You must call 'connect_to_mpc' first with your model_name, client_location, and directory (or provide your assigned 'agent_id') before using '${tool.name}'.`
         }]
       };
     }

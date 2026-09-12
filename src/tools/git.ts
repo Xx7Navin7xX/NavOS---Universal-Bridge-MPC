@@ -32,7 +32,8 @@ export const gitStatusTool: McpTool = {
   name: 'git_status',
   description: 'Read-only Git inspection: returns working tree status for the project workspace. Used especially by WEB Commanders to inspect native workspace state.',
   schema: z.object({
-    project: z.string().describe('Project name or local workspace directory')
+    project: z.string().describe('Project name or local workspace directory'),
+    agent_id: z.string().optional().describe('Your persistent NavOS agent_id (e.g. "agent-3")')
   }),
   handler: async ({ project }, ctx) => {
     const dir = resolveProjectDir(project, ctx.directory);
@@ -73,7 +74,8 @@ export const gitDiffTool: McpTool = {
   schema: z.object({
     project: z.string().describe('Project name or local workspace directory'),
     staged: z.boolean().optional().describe('Whether to view staged changes (--cached)'),
-    filePath: z.string().optional().describe('Optional relative file path to restrict diff output')
+    filePath: z.string().optional().describe('Optional relative file path to restrict diff output'),
+    agent_id: z.string().optional().describe('Your persistent NavOS agent_id (e.g. "agent-3")')
   }),
   handler: async ({ project, staged, filePath }, ctx) => {
     const dir = resolveProjectDir(project, ctx.directory);
@@ -120,7 +122,8 @@ export const gitLogTool: McpTool = {
   description: 'Read-only Git inspection: returns recent commit history for the project workspace.',
   schema: z.object({
     project: z.string().describe('Project name or local workspace directory'),
-    limit: z.number().int().positive().optional().describe('Maximum number of commits to show (default: 10)')
+    limit: z.number().int().positive().optional().describe('Number of commits to return (default 10, max 50)'),
+    agent_id: z.string().optional().describe('Your persistent NavOS agent_id (e.g. "agent-3")')
   }),
   handler: async ({ project, limit = 10 }, ctx) => {
     const dir = resolveProjectDir(project, ctx.directory);

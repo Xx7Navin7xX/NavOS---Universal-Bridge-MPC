@@ -1,0 +1,8 @@
+{
+  "port": 3020,
+  "allowCommands": true,
+  "allowedCommands": ["git", "npm", "echo", "dir", "ls"],
+  "projects": {
+    "ExampleProject": "C:/path/to/project"
+  }
+}

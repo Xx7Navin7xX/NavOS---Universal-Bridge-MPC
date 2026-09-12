@@ -362,10 +362,17 @@ body.dashboard-active #dashboard-view {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .agent-card:hover {
   border-color: var(--border-bright);
+}
+
+.agent-card.expanded {
+  border-color: var(--border-bright);
+  background: #0c0c0c;
 }
 
 .agent-card-header {
@@ -411,6 +418,46 @@ body.dashboard-active #dashboard-view {
 .agent-info-row .role-tag {
   color: #60a5fa;
   font-weight: 700;
+}
+
+.agent-card.agent-disconnected {
+  opacity: 0.75;
+}
+
+.agent-dot.disconnected {
+  color: #6b7280;
+}
+
+.agent-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-dim);
+}
+
+.btn-delete-agent {
+  background: transparent;
+  border: 1px solid #ef4444;
+  color: #ef4444;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-delete-agent:hover {
+  background: #ef4444;
+  color: #000000;
+}
+
+.btn-delete-agent:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .empty-notice {

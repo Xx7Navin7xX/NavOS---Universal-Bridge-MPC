@@ -240,6 +240,10 @@ export function getExplicitlyConnectedAgents(): AgentRecord[] {
   return db.prepare("SELECT * FROM agents WHERE is_explicitly_connected = 1 AND status = 'Connected' ORDER BY last_seen DESC").all() as AgentRecord[];
 }
 
+export function resetConnectedAgentsOnStartup(): void {
+  db.prepare("UPDATE agents SET status = 'Disconnected' WHERE status = 'Connected'").run();
+}
+
 export function setAgentStatus(id: string, status: string): void {
   db.prepare('UPDATE agents SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE id = ?').run(status, id);
 }
@@ -254,6 +258,22 @@ export function setAgentProject(id: string, project: string | null): void {
 
 export function touchAgent(id: string): void {
   db.prepare('UPDATE agents SET last_seen = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+}
+
+export function deleteAgent(id: string): boolean {
+  const existing = db.prepare('SELECT * FROM agents WHERE id = ?').get(id) as AgentRecord | undefined;
+  if (!existing) return false;
+
+  const deleteTx = db.transaction(() => {
+    db.prepare('DELETE FROM project_agents WHERE agent_id = ?').run(id);
+    db.prepare('UPDATE phases SET assigned_worker = NULL WHERE assigned_worker = ?').run(id);
+    db.prepare('UPDATE phases SET commander = NULL WHERE commander = ?').run(id);
+    db.prepare('DELETE FROM agent_messages WHERE sender_id = ? OR recipient_id = ?').run(id, id);
+    db.prepare('DELETE FROM agents WHERE id = ?').run(id);
+  });
+
+  deleteTx();
+  return true;
 }
 
 // ---------------------------------------------------------------------------

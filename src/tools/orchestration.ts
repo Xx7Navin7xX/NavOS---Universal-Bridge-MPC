@@ -67,7 +67,8 @@ export const registerProjectTool: McpTool = {
   schema: z.object({
     project_name: z.string().describe('Target project or workspace name (e.g. "NavOS AI Bridge", "RetroArch")'),
     directory: z.string().optional().describe('Local absolute project directory (defaults to your connected workspace directory)'),
-    description: z.string().optional().describe('Brief description of the project workspace')
+    description: z.string().optional().describe('Brief description of the project workspace'),
+    agent_id: z.string().optional().describe('Your persistent NavOS agent_id (e.g. "agent-3")')
   }),
   handler: async ({ project_name, directory, description }, ctx) => {
     // Permission check: WEB agents are strictly prohibited
@@ -128,7 +129,8 @@ export const getProjectTool: McpTool = {
   name: 'get_project',
   description: 'Retrieves complete project status: current phase, instructions, commander, assigned worker, human intervention state, and latest activity.',
   schema: z.object({
-    project: z.string().describe('Target project name')
+    project: z.string().describe('Target project name'),
+    agent_id: z.string().optional().describe('Your persistent NavOS agent_id (e.g. "agent-3")')
   }),
   handler: async ({ project }) => {
     const proj = getProject(project);
@@ -141,7 +143,7 @@ export const getProjectTool: McpTool = {
 
     const agents = getProjectAgents(proj.name);
     const currentPhase = getCurrentPhase(proj.name);
-    const latestReport = currentPhase ? getLatestPhaseReport(currentPhase.id) : null;
+    const latestReport = currentPhase ? (getLatestPhaseReport(currentPhase.id) || getPhaseReport(proj.name)) : getPhaseReport(proj.name);
 
     const commanderAgent = agents.find(a => a.role === 'Commander');
     const workerAgent = agents.find(a => a.role === 'Worker');
@@ -211,7 +213,8 @@ export const createPhaseTool: McpTool = {
     title: z.string().describe('Short phase title'),
     instructions: z.string().describe('Detailed, step-by-step implementation instructions for the worker'),
     expected_outcome: z.string().describe('Precise expected deliverables or verification criteria'),
-    notes: z.string().optional().describe('Optional architecture notes or context')
+    notes: z.string().optional().describe('Optional architecture notes or context'),
+    agent_id: z.string().optional().describe('Your persistent NavOS agent_id (e.g. "agent-3")')
   }),
   handler: async ({ project, phase_number, title, instructions, expected_outcome, notes }, ctx) => {
     // Permission check: Only Commander can create phases
@@ -287,7 +290,8 @@ export const submitPhaseReportTool: McpTool = {
     blockers: z.string().optional().describe('Unresolved blockers or blockers requiring human decision'),
     questions: z.string().optional().describe('Questions for Commander or human'),
     recommended_next_step: z.string().optional().describe('Recommended next steps for subsequent phases'),
-    human_intervention_required: z.boolean().optional().describe('Set to true if autonomous progression must STOP until a human provides clarification or input')
+    human_intervention_required: z.boolean().optional().describe('Set to true if autonomous progression must STOP until a human provides clarification or input'),
+    agent_id: z.string().optional().describe('Your persistent NavOS agent_id (e.g. "agent-3")')
   }),
   handler: async (args, ctx) => {
     // Permission check: Workers only
@@ -379,7 +383,8 @@ export const getPhaseReportTool: McpTool = {
   description: 'Used by the Commander (and agents) to retrieve the detailed Worker implementation report for a specific phase or the latest phase.',
   schema: z.object({
     project: z.string().describe('Target project name'),
-    phase_number: z.number().int().positive().optional().describe('Phase number to inspect (defaults to latest reported phase)')
+    phase_number: z.number().int().positive().optional().describe('Phase number to inspect (defaults to latest reported phase)'),
+    agent_id: z.string().optional().describe('Your persistent NavOS agent_id (e.g. "agent-3")')
   }),
   handler: async ({ project, phase_number }) => {
     const report = getPhaseReport(project, phase_number);
@@ -423,7 +428,8 @@ export const sendAgentMessageTool: McpTool = {
   schema: z.object({
     message: z.string().describe('Message content'),
     recipient_id: z.string().optional().describe('Target agent ID (omit for project-wide broadcast)'),
-    project: z.string().optional().describe('Related project name')
+    project: z.string().optional().describe('Related project name'),
+    agent_id: z.string().optional().describe('Your persistent NavOS agent_id (e.g. "agent-3")')
   }),
   handler: async ({ message, recipient_id, project }, ctx) => {
     try {
@@ -477,7 +483,8 @@ export const waitForPhaseTool: McpTool = {
   schema: z.object({
     project: z.string().describe('Target project name'),
     after_phase_number: z.number().int().nonnegative().describe('The phase number just completed (waits for phase > after_phase_number)'),
-    timeout_seconds: z.number().int().positive().max(600).optional().describe('Maximum seconds to wait (default 300, max 600)')
+    timeout_seconds: z.number().int().positive().max(600).optional().describe('Maximum seconds to wait (default 300, max 600)'),
+    agent_id: z.string().optional().describe('Your persistent NavOS agent_id (e.g. "agent-3")')
   }),
   handler: async ({ project, after_phase_number, timeout_seconds = 300 }) => {
     const timeoutMs = timeout_seconds * 1000;

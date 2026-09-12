@@ -527,33 +527,49 @@
     return state.agents.filter(a => a.isCurrentlyConnected);
   }
 
+  const expandedAgents = new Set();
+
   function renderConnectedAgents() {
     const connected = getConnectedAgents();
     el.statConnectedAgents.textContent = connected.length;
 
-    if (connected.length === 0) {
-      el.connectedAgentsList.innerHTML = '<div class="empty-notice">No explicitly connected agents</div>';
+    // Show all registered agents, sorting connected/active agents first
+    const allAgents = [...state.agents].sort((a, b) => {
+      if (a.isCurrentlyConnected && !b.isCurrentlyConnected) return -1;
+      if (!a.isCurrentlyConnected && b.isCurrentlyConnected) return 1;
+      return (a.id || '').localeCompare(b.id || '');
+    });
+
+    if (allAgents.length === 0) {
+      el.connectedAgentsList.innerHTML = '<div class="empty-notice">No agents registered</div>';
       return;
     }
 
-    el.connectedAgentsList.innerHTML = connected.map(agent => {
+    el.connectedAgentsList.innerHTML = allAgents.map(agent => {
+      const isConn = !!agent.isCurrentlyConnected;
+      const isExpanded = expandedAgents.has(agent.id);
       const modelName = agent.modelName || agent.id;
       const clientLocation = agent.clientLocation || agent.client || agent.clientName || 'Unknown';
       const agentType = agent.agentType || (agent.directory ? 'NATIVE' : 'WEB');
       const directory = agent.directory || null;
       const role = agent.role || 'Unassigned';
       const project = agent.project || 'None';
+      const status = agent.status || (isConn ? 'Connected' : 'Disconnected');
 
       return `
-        <div class="agent-card">
+        <div class="agent-card ${isConn ? '' : 'agent-disconnected'} ${isExpanded ? 'expanded' : ''}" data-agent-id="${escapeHtml(agent.id)}" title="Click to view details and options">
           <div class="agent-card-header">
-            <span class="agent-dot connected">●</span>
+            <span class="agent-dot ${isConn ? 'connected' : 'disconnected'}">${isConn ? '●' : '○'}</span>
             <span class="agent-name">${escapeHtml(modelName)}</span>
             <span class="agent-type-badge ${agentType === 'NATIVE' ? 'badge-native' : 'badge-web'}" style="margin-left:auto; font-size:10px; padding:2px 6px; border:1px solid #444; border-radius:3px; background:#111; color:${agentType === 'NATIVE' ? '#4af626' : '#64b5f6'};">${escapeHtml(agentType)}</span>
           </div>
           <div class="agent-info-row">
             <span class="label">Client:</span>
             <span class="val">${escapeHtml(clientLocation)}</span>
+          </div>
+          <div class="agent-info-row">
+            <span class="label">Status:</span>
+            <span class="val" style="color: ${isConn ? '#4af626' : '#888'}; font-weight: 600;">${escapeHtml(status)}</span>
           </div>
           <div class="agent-info-row">
             <span class="label">Type:</span>
@@ -572,9 +588,57 @@
             <span class="label">Project:</span>
             <span class="val">${escapeHtml(project)}</span>
           </div>
+          ${isExpanded ? `
+          <div class="agent-actions-row">
+            <button type="button" class="btn-delete-agent" data-agent-id="${escapeHtml(agent.id)}" data-agent-name="${escapeHtml(modelName)}">Delete Agent</button>
+          </div>` : ''}
         </div>
       `;
     }).join('');
+
+    // 1. Click agent card to toggle expansion
+    el.connectedAgentsList.querySelectorAll('.agent-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('button') || e.target.closest('input')) {
+          return;
+        }
+        const agentId = card.getAttribute('data-agent-id');
+        if (!agentId) return;
+
+        if (expandedAgents.has(agentId)) {
+          expandedAgents.delete(agentId);
+        } else {
+          expandedAgents.add(agentId);
+        }
+        renderConnectedAgents();
+      });
+    });
+
+    // 2. Attach click listeners to Delete Agent buttons
+    el.connectedAgentsList.querySelectorAll('.btn-delete-agent').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const agentId = btn.getAttribute('data-agent-id');
+        const agentName = btn.getAttribute('data-agent-name') || agentId;
+        if (!agentId) return;
+
+        if (!confirm(`Are you sure you want to delete agent "${agentName}" (${agentId})?`)) {
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Deleting...';
+        const res = await apiDelete(`/api/agents/${encodeURIComponent(agentId)}`);
+        if (res && res.success) {
+          expandedAgents.delete(agentId);
+          await fetchAllData();
+        } else {
+          alert(`Failed to delete agent: ${res?.error || 'Unknown error'}`);
+          btn.disabled = false;
+          btn.textContent = 'Delete Agent';
+        }
+      });
+    });
   }
 
   // --------------------------------------------------------------------------
@@ -843,8 +907,8 @@
       });
 
       const refreshEvents = [
-        'agent_connected', 'agent_disconnected', 'agent_updated',
-        'project_updated', 'project_created', 'phase_created',
+        'agent_connected', 'agent_disconnected', 'agent_updated', 'agent_deleted',
+        'project_updated', 'project_created', 'project_deleted', 'phase_created',
         'phase_advanced', 'phase_reported', 'human_input_requested', 'human_input_answered'
       ];
       refreshEvents.forEach(evt => {

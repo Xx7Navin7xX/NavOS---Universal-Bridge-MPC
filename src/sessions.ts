@@ -1,10 +1,12 @@
 import { Response } from 'express';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { AgentRole, AgentType, SessionContext } from './types.js';
+import { AgentRole, AgentType, AgentRecord } from './types.js';
 import {
   connectAgent,
   getAgent,
+  getAllAgents,
+  getExplicitlyConnectedAgents,
   setAgentStatus,
   setAgentRole,
   setAgentProject,
@@ -33,6 +35,7 @@ export interface ActiveSession {
   headers?: Record<string, any>;
   query?: Record<string, any>;
   requestedAgent?: string | null;
+  isSseStream?: boolean;
 }
 
 export function inferProviderFromClient(clientName: string, currentProvider: string = 'AI'): string {
@@ -49,6 +52,44 @@ class SessionRegistry {
   private sessions = new Map<string, ActiveSession>();
   private dashboardClients = new Set<Response>();
   private agentCounter = 0;
+  private pendingDisconnectTimers = new Map<string, NodeJS.Timeout>();
+  private gracePeriodSeconds = 45; // Default: 45s grace period for SSE transport drops
+
+  constructor() {
+    this.initAgentCounter();
+  }
+
+  public setGracePeriod(seconds: number): void {
+    this.gracePeriodSeconds = Math.max(0, seconds);
+  }
+
+  public getGracePeriod(): number {
+    return this.gracePeriodSeconds;
+  }
+
+  public clearGraceTimers(): void {
+    for (const timer of this.pendingDisconnectTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.pendingDisconnectTimers.clear();
+  }
+
+  private initAgentCounter(): void {
+    try {
+      const all = getAllAgents();
+      let maxNum = 0;
+      for (const a of all) {
+        const match = a.id.match(/^agent-(\d+)$/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      }
+      this.agentCounter = maxNum;
+    } catch {
+      this.agentCounter = 0;
+    }
+  }
 
   // -------------------------------------------------------------------------
   // Dashboard SSE Stream
@@ -80,7 +121,8 @@ class SessionRegistry {
     transport: SSEServerTransport | StreamableHTTPServerTransport | any,
     requestedAgentId?: string | null,
     headers?: Record<string, any>,
-    query?: Record<string, any>
+    query?: Record<string, any>,
+    isSseStream: boolean = false
   ): ActiveSession {
     const activeSession: ActiveSession = {
       sessionId,
@@ -96,7 +138,8 @@ class SessionRegistry {
       isExplicitlyConnected: false,
       headers,
       query,
-      requestedAgent: requestedAgentId
+      requestedAgent: requestedAgentId,
+      isSseStream
     };
 
     this.sessions.set(sessionId, activeSession);
@@ -104,7 +147,7 @@ class SessionRegistry {
   }
 
   // -------------------------------------------------------------------------
-  // Explicit Agent Connection (connect_to_mpc)
+  // Explicit Agent Connection (connect_to_mpc) with Persistent Identity Re-Binding
   // -------------------------------------------------------------------------
   public connectMpcSession(
     sessionId: string,
@@ -112,6 +155,7 @@ class SessionRegistry {
       modelName: string;
       clientLocation: string;
       directory?: string | null;
+      agentId?: string | null;
     }
   ): { session: ActiveSession; agent: any } {
     let session = this.sessions.get(sessionId);
@@ -126,16 +170,52 @@ class SessionRegistry {
     const directory = hasDir ? rawDir : null;
     const agentType: AgentType = directory ? 'NATIVE' : 'WEB';
 
-    // Allocate an internal agent ID if not yet assigned
-    let agentId = session.agentId;
-    if (!agentId) {
-      this.agentCounter++;
-      agentId = `agent-${this.agentCounter}`;
-      // Check collision
-      while (Array.from(this.sessions.values()).some(s => s.agentId === agentId && s.sessionId !== sessionId)) {
+    const requestedAgentId = params.agentId ? params.agentId.trim() : null;
+    let agentId: string;
+    let roleToUse: AgentRole = session.role || 'Unassigned';
+    let projectToUse: string | null = session.activeProject;
+
+    if (requestedAgentId) {
+      // Re-bind to existing agent identity
+      const existingDb = getAgent(requestedAgentId);
+      if (existingDb) {
+        agentId = existingDb.id;
+        roleToUse = (existingDb.role as AgentRole) || roleToUse;
+        projectToUse = existingDb.current_project || projectToUse;
+
+        // Retire any older transport session previously mapped to this agentId
+        for (const [sId, s] of this.sessions.entries()) {
+          if (sId !== sessionId && s.agentId === agentId) {
+            s.agentId = null;
+            s.isExplicitlyConnected = false;
+            if (!this.isPersistentStream(s)) {
+              this.sessions.delete(sId);
+            }
+          }
+        }
+      } else {
+        // Agent ID specified by client doesn't exist yet, register with that ID
+        agentId = requestedAgentId;
+      }
+    } else {
+      // Check if current session already has an agentId allocated
+      agentId = session.agentId || '';
+      if (!agentId) {
         this.agentCounter++;
         agentId = `agent-${this.agentCounter}`;
+        // Ensure no collision with DB or other active sessions
+        while (getAgent(agentId) || Array.from(this.sessions.values()).some(s => s.agentId === agentId && s.sessionId !== sessionId)) {
+          this.agentCounter++;
+          agentId = `agent-${this.agentCounter}`;
+        }
       }
+    }
+
+    // Clear any pending disconnect grace period timer for this agent
+    const pendingTimer = this.pendingDisconnectTimers.get(agentId);
+    if (pendingTimer) {
+      clearTimeout(pendingTimer);
+      this.pendingDisconnectTimers.delete(agentId);
     }
 
     const provider = inferProviderFromClient(clientLocation);
@@ -149,8 +229,8 @@ class SessionRegistry {
       agentType,
       directory,
       provider,
-      role: session.role || 'Unassigned',
-      currentProject: session.activeProject
+      role: roleToUse,
+      currentProject: projectToUse
     });
 
     session.agentId = agentId;
@@ -160,6 +240,8 @@ class SessionRegistry {
     session.directory = directory;
     session.clientName = clientLocation;
     session.provider = provider;
+    session.role = roleToUse;
+    session.activeProject = projectToUse;
     session.isExplicitlyConnected = true;
     session.lastSeen = new Date();
 
@@ -187,6 +269,96 @@ class SessionRegistry {
     return { session, agent: agentRecord };
   }
 
+  // -------------------------------------------------------------------------
+  // Persistent Stream Detection & Stale Transport Reaping
+  // -------------------------------------------------------------------------
+  public isPersistentStream(session: ActiveSession): boolean {
+    if (!session) return false;
+    if (session.isSseStream) {
+      const res = (session.transport as any)?.res || (session.transport as any)?._res;
+      if (res && typeof res.writableEnded === 'boolean') {
+        return res.writableEnded === false && !res.destroyed;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  public reapStaleTransportSessions(maxIdleSeconds: number = 1800): number {
+    const now = Date.now();
+    let reapedCount = 0;
+
+    for (const [sessionId, session] of this.sessions.entries()) {
+      // 1. NEVER reap active persistent streams (e.g. Antigravity SSE connection)
+      if (this.isPersistentStream(session)) {
+        continue;
+      }
+
+      // 2. Check idle time for stateless HTTP sessions
+      const idleSeconds = (now - new Date(session.lastSeen).getTime()) / 1000;
+      if (idleSeconds > maxIdleSeconds) {
+        const agentId = session.agentId;
+        this.sessions.delete(sessionId);
+        reapedCount++;
+
+        // If this logical agent has no remaining active session, mark Disconnected in DB
+        if (agentId) {
+          const hasOtherSession = Array.from(this.sessions.values()).some(s => s.agentId === agentId);
+          if (!hasOtherSession) {
+            const pendingTimer = this.pendingDisconnectTimers.get(agentId);
+            if (pendingTimer) {
+              clearTimeout(pendingTimer);
+              this.pendingDisconnectTimers.delete(agentId);
+            }
+            setAgentStatus(agentId, 'Disconnected');
+            this.broadcast('agent_disconnected', { agentId, sessionId, status: 'Disconnected' });
+          }
+        }
+      }
+    }
+
+    return reapedCount;
+  }
+
+  // -------------------------------------------------------------------------
+  // Logical Connected Agents (Deduplicated 1-to-1 Logical Agent View)
+  // -------------------------------------------------------------------------
+  public getLogicalConnectedAgents(): Array<{ session: ActiveSession | undefined; agent: AgentRecord }> {
+    const activeSessions = Array.from(this.sessions.values()).filter(s => s.isExplicitlyConnected && s.agentId !== null);
+    const activeAgentMap = new Map<string, ActiveSession>();
+
+    for (const session of activeSessions) {
+      if (session.agentId) {
+        const existing = activeAgentMap.get(session.agentId);
+        if (!existing || session.lastSeen > existing.lastSeen) {
+          activeAgentMap.set(session.agentId, session);
+        }
+      }
+    }
+
+    const result: Array<{ session: ActiveSession | undefined; agent: AgentRecord }> = [];
+    const seenAgentIds = new Set<string>();
+
+    for (const [agentId, session] of activeAgentMap.entries()) {
+      const dbAgent = getAgent(agentId);
+      if (dbAgent && dbAgent.is_explicitly_connected === 1) {
+        result.push({ session, agent: dbAgent });
+        seenAgentIds.add(agentId);
+      }
+    }
+
+    // Include explicitly connected agents from SQLite marked Connected that are between stateless turns
+    const dbAgents = getExplicitlyConnectedAgents();
+    for (const dbAgent of dbAgents) {
+      if (!seenAgentIds.has(dbAgent.id)) {
+        result.push({ session: undefined, agent: dbAgent });
+        seenAgentIds.add(dbAgent.id);
+      }
+    }
+
+    return result;
+  }
+
   public updateClientInfo(sessionId: string, rawClientName: string, clientVersion: string): void {
     const session = this.sessions.get(sessionId);
     if (!session) return;
@@ -198,18 +370,67 @@ class SessionRegistry {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
+    const wasSseStream = session.isSseStream === true;
     this.sessions.delete(sessionId);
 
     if (session.isExplicitlyConnected && session.agentId) {
-      setAgentStatus(session.agentId, 'Disconnected');
+      const agentId = session.agentId;
+      const hasOtherSession = Array.from(this.sessions.values()).some(s => s.agentId === agentId);
 
-      logActivity('agent_disconnected', `Agent '${session.agentId}' (${session.modelName || session.clientLocation || 'unknown'}) disconnected`, session.agentId);
+      // When an SSE transport closes, do NOT instantly mark the logical agent Disconnected.
+      // Give it a reconnect grace period (30–60s, default 45s) to allow transparent client reconnection.
+      if (!hasOtherSession && wasSseStream) {
+        if (this.gracePeriodSeconds > 0) {
+          const existingTimer = this.pendingDisconnectTimers.get(agentId);
+          if (existingTimer) {
+            clearTimeout(existingTimer);
+          }
 
-      this.broadcast('agent_disconnected', {
-        agentId: session.agentId,
-        sessionId,
-        status: 'Disconnected'
-      });
+          const modelLabel = session.modelName || session.clientLocation || 'unknown';
+          const timer = setTimeout(() => {
+            this.pendingDisconnectTimers.delete(agentId);
+            const currentlyActive = Array.from(this.sessions.values()).some(s => s.agentId === agentId);
+            if (!currentlyActive) {
+              setAgentStatus(agentId, 'Disconnected');
+              logActivity('agent_disconnected', `Agent '${agentId}' (${modelLabel}) disconnected after grace period`, agentId);
+              this.broadcast('agent_disconnected', {
+                agentId,
+                sessionId,
+                status: 'Disconnected'
+              });
+            }
+          }, this.gracePeriodSeconds * 1000);
+
+          this.pendingDisconnectTimers.set(agentId, timer);
+        } else {
+          setAgentStatus(agentId, 'Disconnected');
+          logActivity('agent_disconnected', `Agent '${agentId}' (${session.modelName || session.clientLocation || 'unknown'}) disconnected`, agentId);
+          this.broadcast('agent_disconnected', {
+            agentId,
+            sessionId,
+            status: 'Disconnected'
+          });
+        }
+      }
+    }
+  }
+
+  public deleteAgentSessions(agentId: string): void {
+    const pendingTimer = this.pendingDisconnectTimers.get(agentId);
+    if (pendingTimer) {
+      clearTimeout(pendingTimer);
+      this.pendingDisconnectTimers.delete(agentId);
+    }
+
+    for (const [sessionId, session] of this.sessions.entries()) {
+      if (session.agentId === agentId) {
+        if (session.transport && typeof session.transport.close === 'function') {
+          try {
+            session.transport.close();
+          } catch {}
+        }
+        this.sessions.delete(sessionId);
+      }
     }
   }
 
@@ -227,6 +448,18 @@ class SessionRegistry {
   public getAllActiveSessions(): ActiveSession[] {
     // Return explicitly connected sessions only
     return Array.from(this.sessions.values()).filter(s => s.isExplicitlyConnected && s.agentId !== null);
+  }
+
+  public clearAllSessions(): void {
+    this.clearGraceTimers();
+    for (const session of this.sessions.values()) {
+      try {
+        if (session.transport && typeof session.transport.close === 'function') {
+          session.transport.close();
+        }
+      } catch {}
+    }
+    this.sessions.clear();
   }
 
   public updateAgentRole(agentId: string, role: AgentRole): boolean {
@@ -272,24 +505,14 @@ class SessionRegistry {
     if (session) {
       session.lastSeen = new Date();
       if (session.agentId) {
+        const pendingTimer = this.pendingDisconnectTimers.get(session.agentId);
+        if (pendingTimer) {
+          clearTimeout(pendingTimer);
+          this.pendingDisconnectTimers.delete(session.agentId);
+        }
         touchAgent(session.agentId);
       }
     }
-  }
-
-  public createSessionContext(session: ActiveSession): SessionContext {
-    return {
-      sessionId: session.sessionId,
-      agentId: session.agentId,
-      modelName: session.modelName,
-      clientLocation: session.clientLocation,
-      agentType: session.agentType,
-      directory: session.directory,
-      role: session.role,
-      provider: session.provider,
-      activeProject: session.activeProject,
-      isExplicitlyConnected: session.isExplicitlyConnected
-    };
   }
 }
 

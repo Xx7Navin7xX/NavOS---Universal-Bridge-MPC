@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { McpTool } from '../types.js';
 import { config } from '../config.js';
 import { sessionRegistry } from '../sessions.js';
-import { getAllAgents, getAllProjects } from '../db.js';
+import { getAllProjects } from '../db.js';
 
 export const getServerStatusTool: McpTool = {
   name: 'get_server_status',
