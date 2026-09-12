@@ -12,6 +12,14 @@ The project was created around a simple idea:
 
 NavOS provides the coordination layer while the connected AI agents remain responsible for their own reasoning, tools, files, terminals, IDEs, and development environments.
 
+<img width="1917" height="973" alt="image" src="https://github.com/user-attachments/assets/8c5f3422-c839-4cab-ba93-8a83bf6c6ba2" />
+
+Youtube Video Link:
+
+Full one - 
+
+Partial one - 
+
 ---
 
 ## ⚠️ Project Status
@@ -124,6 +132,8 @@ For example:
 
 NavOS provides the shared coordination layer between them.
 
+<img width="1917" height="853" alt="image" src="https://github.com/user-attachments/assets/4a8e6866-09d4-427d-acd4-76cbd35d8d78" />
+
 ---
 
 # The Problem
@@ -188,6 +198,8 @@ NavOS experiments with another model:
 ```
 
 The goal is to allow the agents to coordinate through NavOS rather than forcing the human to manually relay every message.
+
+<img width="1917" height="1143" alt="image" src="https://github.com/user-attachments/assets/831fd72a-b43a-4afb-af76-21a8e70f360f" />
 
 ---
 
@@ -1160,14 +1172,443 @@ The test suites covered areas including:
 * agent deletion
 * lifecycle hardening
 
+# Tested AI Clients & Autonomous Loop Experiments
+
+A major part of the NavOS development process was testing whether different AI clients could remain in an autonomous Commander → Worker workflow without requiring the human to manually press "Continue" or send every next instruction.
+
+The experiments revealed that different AI clients behave very differently when they are idle.
+
+NavOS itself can track that a new phase is ready, but the AI client must have some mechanism that causes it to start or resume a reasoning turn.
+
+The following clients were tested.
+
+---
+
+## Antigravity IDE / Gemini
+
+**Role tested:** Worker
+
+**Environment:** Antigravity IDE
+
+**Result:** ✅ Successfully tested
+
+Antigravity was the most successful environment for the autonomous Worker loop.
+
+### How the loop worked
+
+Antigravity supports background tasks.
+
+A background watcher process was used to wait for changes in NavOS project state.
+
+The general workflow was:
+```text
+Antigravity Worker
+        │
+        │ Wait for next phase
+        ▼
+Background Watcher
+        │
+        │ Poll NavOS
+        ▼
+Phase becomes available
+        │
+        ▼
+Watcher exits
+        │
+        ▼
+Background task completes
+        │
+        ▼
+Antigravity wakes/resumes
+        │
+        ▼
+Gemini continues reasoning
+        │
+        ▼
+Worker executes phase
+```
+The important discovery was that completion of a background task can wake/resume Antigravity's AI workflow.
+
+This made it possible to build a practical waiting mechanism around NavOS.
+
+Experiments
+
+A simple delayed background task was tested using a command equivalent to:
+
+Wait 10 seconds
+→ complete task
+→ output wake-up marker
+
+Antigravity resumed automatically when the background task completed.
+
+A longer one-shot delay was also tested.
+
+The same mechanism successfully allowed Antigravity to remain waiting for NavOS and resume when the required condition occurred.
+
+MCP notification behavior
+
+MCP notifications by themselves were also investigated.
+
+Notifications such as:
+
+notifications/message
+progress
+resource updates
+tools/list changes
+
+do not automatically cause an idle Gemini/Antigravity model to begin a new reasoning turn.
+
+Therefore:
+
+MCP notification
+      ≠
+AI wake-up
+
+The practical solution was to use a background task whose completion causes the Antigravity environment to resume the model.
+
+Result
+
+Antigravity successfully acted as the NavOS Worker in the full autonomous project test.
+
+---
+
+## Codex Desktop
+
+Role tested: Commander
+
+Environment: Codex Desktop
+
+Result: ✅ Successfully tested
+
+Codex was successfully used as the Commander in the autonomous multi-phase workflow.
+
+However, Codex behaves differently from Antigravity.
+
+Background process behavior
+
+A detached/local background process can continue running while Codex is idle.
+
+However:
+
+Background process finishes
+        ≠
+Codex automatically starts a new reasoning turn
+
+Therefore, simply running a watcher process was not sufficient to wake Codex.
+
+Heartbeat / Scheduled Execution
+
+Codex's heartbeat/scheduled execution mechanism was tested successfully.
+
+The workflow was:
+
+```text
+Codex
+ │
+ │ Creates/starts workflow
+ ▼
+NavOS
+ │
+ │ Worker performs phase
+ ▼
+NavOS state changes
+ │
+ │
+ ▼
+Codex heartbeat
+ │
+ │ Starts a fresh reasoning turn
+ ▼
+Codex checks NavOS
+ │
+ ▼
+Codex continues workflow
+```
+A one-time heartbeat test successfully caused Codex to wake and execute a new reasoning turn without a manual user message.
+
+The test produced the expected wake-up output:
+
+NAVOS_CODEX_HEARTBEAT_WAKE_TEST
+Result
+
+Codex successfully operated as the Commander in the full autonomous test.
+
+---
+## ChatGPT Web
+
+Role tested: Commander / Coordinator
+
+Environment: ChatGPT Web
+
+Result: ✅ Wake-up mechanism tested
+
+ChatGPT Web was tested using scheduled/heartbeat-style execution.
+
+The important difference is that a scheduled ChatGPT execution does not necessarily continue inside the exact same conversation turn.
+
+Instead, it can start a new ChatGPT turn/context.
+
+The tested workflow was:
+```text
+ChatGPT
+ │
+ │ Initial turn
+ ▼
+NavOS
+ │
+ │ Wait
+ ▼
+Scheduled execution
+ │
+ ▼
+New ChatGPT turn
+ │
+ ▼
+Reconnect to NavOS
+ │
+ ▼
+Check persistent NavOS state
+ │
+ ▼
+Continue coordination
+```
+
+A heartbeat test successfully woke ChatGPT and caused it to reconnect to NavOS.
+
+The resulting test confirmed:
+
+NavOS Universal AI Bridge: ONLINE
+Active connections: 3
+Registered projects: 1
+ChatGPT agent: CONNECTED
+
+This demonstrated that ChatGPT can be used with an external persistent coordination layer even though the scheduled execution may occur in a new chat/turn context.
+
+Important limitation
+
+ChatGPT Web does not behave like a persistent native IDE process.
+
+A scheduled wake-up should therefore be treated as:
+
+New reasoning turn
++
+Persistent external NavOS state
+
+rather than:
+
+Same conversation continuously running
+
+This means NavOS must keep enough persistent state for the AI to reconstruct what is happening when it wakes.
+
+Cross-Client Wake-Up Comparison
+
+The experiments showed three different behaviors.
+
+AI Client	Tested Role	Wake Mechanism	Result
+Antigravity / Gemini	Worker	Background task completion	✅ Successful
+Codex Desktop	Commander	Heartbeat / scheduled execution	✅ Successful
+ChatGPT Web	Commander / Coordinator	Scheduled execution / heartbeat-style wake	✅ Successful
+
+The mechanisms can be summarized as:
+
+┌─────────────────────┬──────────────────────────────┐
+│ AI Client           │ Wake Mechanism               │
+├─────────────────────┼──────────────────────────────┤
+│ Antigravity/Gemini  │ Background task completion   │
+│ Codex Desktop       │ Heartbeat / scheduled turn   │
+│ ChatGPT Web         │ Scheduled new turn           │
+└─────────────────────┴──────────────────────────────┘
+What Did NOT Work
+
+One of the most important findings was that NavOS cannot assume that sending an MCP notification will wake an idle AI model.
+
+The following general assumption was tested and found to be unreliable:
+```text
+NavOS
+  │
+  │ MCP notification
+  ▼
+Idle AI
+  │
+  └── Automatically starts thinking
+
+Instead, the observed behavior was:
+
+NavOS
+  │
+  │ MCP notification
+  ▼
+AI client
+  │
+  └── Notification may be received,
+      but idle model does not necessarily wake
+```
+Therefore, the autonomous loop depends on both sides:
+
+NavOS must maintain persistent project/phase state.
+The AI client must provide some mechanism capable of starting/resuming execution.
+Full Autonomous 5-Phase Test
+```text
+The most important end-to-end experiment used:
+
+Commander:
+Codex Desktop
+
+Worker:
+Gemini / Antigravity IDE
+
+The project was divided into five phases.
+
+Phase 1
+Baseline project inventory
+
+        ↓
+
+Phase 2
+README contract
+
+        ↓
+
+Phase 3
+Configuration validation
+
+        ↓
+
+Phase 4
+Automated testing
+
+        ↓
+
+Phase 5
+Final verification
+```
+The Worker executed the phases inside its native project environment while the Commander coordinated the workflow.
+
+The test completed all five phases autonomously.
+
+The final test result included:
+
+11 / 11 tests passed
+
+The original project files were preserved during the experiment, including the baseline configuration and test files.
+
+This was the first major proof that the NavOS Commander → Worker concept could operate across two different AI environments without requiring the human to manually relay every phase.
+
+What These Experiments Proved
+
+The experiments demonstrated several important points.
+
+1. AI agents can participate in an external persistent workflow
+
+An AI does not need to store the entire project workflow inside its own conversation.
+
+NavOS can maintain:
+
+Agent
+Project
+Role
+Phase
+Report
+Message
+State
+
+outside the AI conversation.
+
+2. Different AI clients require different wake strategies
+
+There is no universal "wake the AI" mechanism.
+
+Instead:
+
+Antigravity → background task completion
+
+Codex       → heartbeat / scheduled execution
+
+ChatGPT     → scheduled new turn
+3. Persistent external state is extremely important
+
+Because some clients may start a completely new reasoning turn, NavOS needs to remain the source of truth for project coordination.
+
+Conceptually:
+
+AI memory
+    +
+NavOS persistent state
+    =
+Recoverable workflow
+4. MCP alone does not solve autonomous execution
+
+MCP can provide the communication interface, but it does not guarantee that an idle AI client will spontaneously begin another reasoning cycle.
+
+This became one of the major architectural discoveries of the project.
+
+Experimental Conclusion
+
+The experiments demonstrated that autonomous multi-agent workflows are technically possible, but the implementation depends heavily on the execution model of each AI client.
+
+The most successful tested combination was:
+
+Codex Desktop
+     │
+     │ Commander
+     ▼
+   NavOS
+     │
+     │ Phase coordination
+     ▼
+Antigravity / Gemini
+     │
+     │ Worker
+     ▼
+Native Project
+
+The experiment successfully completed a five-phase development workflow with no manual phase-by-phase message relay.
+
+However, these experiments also revealed that the communication protocol and AI wake-up mechanism are separate problems.
+
+NavOS can know that work is ready.
+
+The remaining question is how the target AI agent should reliably receive that state change and begin its next reasoning cycle.
+
+This distinction is one of the primary reasons the project's next-generation architecture is being evaluated before further development continues.
+
+
+### The important part
+
+I'd **definitely keep this section in the public README**. It's actually one of the strongest parts of the project story.
+
+The really interesting result isn't just *"I connected Gemini, Codex and ChatGPT."*
+
+It's this:
+
+```text
+             NavOS State
+                  │
+                  ▼
+        ┌──────────────────┐
+        │  Phase Available │
+        └────────┬─────────┘
+                 │
+        ┌────────┼─────────┐
+        ▼        ▼         ▼
+     Agy       Codex     ChatGPT
+      │          │          │
+ Background   Heartbeat   Scheduled
+ completion   /schedule   new turn
+      │          │          │
+      ▼          ▼          ▼
+    Wakes      Wakes      Wakes
+
+Same NavOS state → completely different wake mechanisms depending on the AI client.
+
 ---
 
 # Build Verification
 
 The project also passed the build verification step.
 
-```text
 npm run build
+
 ```
 
 completed successfully during the public-release audit.
