@@ -14,11 +14,13 @@ NavOS provides the coordination layer while the connected AI agents remain respo
 
 <img width="1917" height="973" alt="image" src="https://github.com/user-attachments/assets/8c5f3422-c839-4cab-ba93-8a83bf6c6ba2" />
 
-Youtube Video Link:
+---
 
-Full one - 
-
-Partial one - 
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=IPpBt0XnYww">
+    <img src="https://youtube.com" alt="Watch the video" width="100%">
+  </a>
+</p>
 
 ---
 
